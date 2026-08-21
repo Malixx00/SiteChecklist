@@ -1,0 +1,25 @@
+{
+  "name": "Site Reporter",
+  "short_name": "SiteReporter",
+  "description": "Australian Turntables site inspection checklists for field technicians. Works offline.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#F4F6F7",
+  "theme_color": "#425563",
+  "lang": "en-AU",
+  "dir": "ltr",
+  "categories": ["business", "productivity", "utilities"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Draft Report", "url": "./index.html#/report" },
+    { "name": "Choose Survey", "url": "./index.html#/surveys" }
+  ]
+}
