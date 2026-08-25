@@ -106,8 +106,12 @@ async function collect() {
   add('Browser', navigator.userAgent);
   add('Language', navigator.language);
 
-  add('Voice dictation', (window.SpeechRecognition || window.webkitSpeechRecognition)
-    ? 'Supported' : 'Not supported on this browser');
+  const speech = window.SpeechRecognition || window.webkitSpeechRecognition;
+  add('Voice dictation', !speech
+    ? 'Not supported on this browser'
+    : (window.isSecureContext === false
+      ? 'Blocked - needs an HTTPS connection'
+      : 'Supported'), !speech || window.isSecureContext === false);
   add('Camera capture', 'Supported (system camera via file input)');
 
   for (const name of ['microphone', 'camera']) {

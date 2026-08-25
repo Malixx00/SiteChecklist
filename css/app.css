@@ -388,6 +388,11 @@ body {
   gap: 10px;
 }
 
+/* These are scrolling flex columns. Without this, a page taller than the
+   viewport squashes every child instead of scrolling: rows collapse to their
+   min-height and their text spills over the row below. */
+.cards > *, .page > * { flex-shrink: 0; }
+
 .page { padding: 16px; gap: 12px; }
 .page--report { padding: 12px 16px; }
 .page--settings { padding: 0 0 24px; gap: 0; }

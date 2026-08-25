@@ -12,7 +12,7 @@
 // prompt. User data lives in IndexedDB / localStorage and is never touched
 // here, so an update can never discard unsynchronised field records.
 
-const CACHE_VERSION = '2026.08.21.3';
+const CACHE_VERSION = '2026.08.25.1';
 const CACHE_NAME = `site-reporter-${CACHE_VERSION}`;
 
 const SHELL = [

@@ -146,14 +146,30 @@ function renderStandard(q, a, ctx) {
     // Persist as the technician types. Debounced so a long note is one write
     // per pause rather than one per keystroke.
     let timer = null;
-    textarea.addEventListener('input', () => {
+    let queued = false;
+    const schedule = (delay) => {
       clearTimeout(timer);
-      timer = setTimeout(() => ctx.onNote(q.id, textarea.value), 250);
-    });
-    textarea.addEventListener('blur', () => {
+      queued = true;
+      timer = setTimeout(() => {
+        queued = false;
+        ctx.onNote(q.id, textarea.value);
+      }, delay);
+    };
+
+    textarea.addEventListener('input', () => schedule(250));
+    // Blur schedules rather than writing inline. Blur runs before the click
+    // that caused it, so writing here re-renders the card and detaches the
+    // button being pressed - the tap is then swallowed. Deferring by a tick
+    // lets the click land first, and the note is still written.
+    textarea.addEventListener('blur', () => schedule(0));
+    // A card can be detached with a write still queued; flush it rather than
+    // lose what was typed.
+    node._teardown = [...(node._teardown ?? []), () => {
+      if (!queued) return;
       clearTimeout(timer);
+      queued = false;
       ctx.onNote(q.id, textarea.value);
-    });
+    }];
 
     wireMic(node, q, ctx, textarea);
   }
@@ -208,6 +224,13 @@ function wireMic(node, q, ctx, textarea) {
   // Detached cards must not keep repainting; the checklist view calls this.
   node._teardown = [...(node._teardown ?? []), unsubscribe];
 
+  // Pressing the mic must not blur the note field. A blur flushes the note,
+  // which re-renders the card and detaches this very button before the browser
+  // can dispatch its click - the tap would silently do nothing. Keeping focus
+  // in the textarea also preserves the caret that insertVoiceText writes at.
+  button.addEventListener('pointerdown', (e) => e.preventDefault());
+  button.addEventListener('mousedown', (e) => e.preventDefault());
+
   button.addEventListener('click', () => {
     const v = ctx.voice.viewFor(q.id);
     if (v.isListening) {
@@ -218,6 +241,15 @@ function wireMic(node, q, ctx, textarea) {
       toast('Voice recognition is not available on this device. Type the note instead.');
       return;
     }
+    // The mic press deliberately did not move focus, so claim it here: the
+    // caret is where recognised text lands, and a focused note field also stops
+    // the checklist from rebuilding this card mid-session.
+    if (document.activeElement !== textarea) {
+      textarea.focus();
+      const end = textarea.value.length;
+      textarea.setSelectionRange(end, end);
+    }
+
     ctx.voice.start(q.id, (text) => {
       const start = textarea.selectionStart ?? textarea.value.length;
       const end = textarea.selectionEnd ?? textarea.value.length;

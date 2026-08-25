@@ -27,6 +27,14 @@ const MESSAGES = {
   aborted: null, // user-initiated stop - not an error worth showing
 };
 
+// Browsers expose SpeechRecognition on insecure origins but refuse the mic, so
+// a plain-http LAN address fails as a bare permission error. Say what it is.
+const INSECURE = 'Voice dictation needs a secure (HTTPS) connection to the app.';
+
+function isInsecure() {
+  return typeof window !== 'undefined' && window.isSecureContext === false;
+}
+
 export class VoiceController {
   constructor() {
     this.available = Impl !== null;
@@ -39,6 +47,7 @@ export class VoiceController {
     this._userStopped = false;
     this._pending = null;
     this._listeners = new Set();
+    this._errorListeners = new Set();
     this._recognition = null;
   }
 
@@ -48,8 +57,22 @@ export class VoiceController {
     return () => this._listeners.delete(fn);
   }
 
-  _emit(error = null) {
-    this._listeners.forEach((fn) => fn(this, error));
+  /**
+   * Subscribe to failures. Kept separate from onChange because every card
+   * subscribes to state, and a shared failure must be reported once.
+   */
+  onError(fn) {
+    this._errorListeners.add(fn);
+    return () => this._errorListeners.delete(fn);
+  }
+
+  _emit() {
+    this._listeners.forEach((fn) => fn(this));
+  }
+
+  _fail(message) {
+    if (!message) return; // e.g. a user-initiated abort
+    this._errorListeners.forEach((fn) => fn(message));
   }
 
   _set(state, partial = '') {
@@ -65,11 +88,21 @@ export class VoiceController {
     rec.interimResults = true;
     rec.maxAlternatives = 1;
 
-    rec.onstart = () => this._set(VoiceState.LISTENING);
+    // Aborting one session to start another leaves the old object still firing
+    // onerror/onend afterwards. Without this guard those late events reset the
+    // session that just replaced it, and the mic goes dead while it listens.
+    const stale = () => this._recognition !== rec;
+
+    rec.onstart = () => {
+      if (stale()) return;
+      this._set(VoiceState.LISTENING);
+    };
     rec.onaudioend = () => {
+      if (stale()) return;
       if (this.state === VoiceState.LISTENING) this._set(VoiceState.PROCESSING);
     };
     rec.onresult = (event) => {
+      if (stale()) return;
       let finalText = '';
       let interim = '';
       for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -88,6 +121,7 @@ export class VoiceController {
       }
     };
     rec.onerror = (event) => {
+      if (stale()) return;
       // A queued start means the user tapped another card's mic - relaunch
       // instead of reporting an error.
       if (this._pending) {
@@ -104,14 +138,19 @@ export class VoiceController {
       }
       this._onResult = null;
       this.activeTarget = null;
-      const message = event.error in MESSAGES
-        ? MESSAGES[event.error]
-        : 'Voice recognition failed. Please try again.';
+      const permissionError = event.error === 'not-allowed' || event.error === 'service-not-allowed';
+      const message = permissionError && isInsecure()
+        ? INSECURE
+        : (event.error in MESSAGES
+          ? MESSAGES[event.error]
+          : 'Voice recognition failed. Please try again.');
       this.state = VoiceState.IDLE;
       this.partialText = '';
-      this._emit(message);
+      this._emit();
+      this._fail(message);
     };
     rec.onend = () => {
+      if (stale()) return;
       if (this._pending) {
         const next = this._pending;
         this._pending = null;
@@ -154,8 +193,11 @@ export class VoiceController {
       this._set(VoiceState.LISTENING);
     } catch (e) {
       this.activeTarget = null;
+      this._onResult = null;
       this.state = VoiceState.IDLE;
-      this._emit('Voice recognition could not start. Please try again.');
+      this.partialText = '';
+      this._emit();
+      this._fail(isInsecure() ? INSECURE : 'Voice recognition could not start. Please try again.');
     }
   }
 

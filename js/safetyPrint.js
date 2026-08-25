@@ -154,6 +154,28 @@ export function buildSafetyHtml(section, answers, inspectorName, siteId) {
 }
 
 /**
+ * Waits for the frame's webfonts and images, so the first page out of the
+ * dialog is the branded one rather than a half-loaded draft.
+ * Never rejects - printing unstyled beats not printing at all.
+ */
+async function waitForAssets(doc) {
+  const jobs = [];
+  if (doc.fonts?.ready) jobs.push(doc.fonts.ready);
+  for (const img of doc.images) {
+    if (img.complete) continue;
+    jobs.push(new Promise((done) => {
+      img.addEventListener('load', done, { once: true });
+      img.addEventListener('error', done, { once: true });
+    }));
+  }
+  // Cap the wait so a stalled asset cannot strand the export.
+  await Promise.race([
+    Promise.all(jobs).catch(() => {}),
+    new Promise((done) => setTimeout(done, 3000)),
+  ]);
+}
+
+/**
  * Opens the platform print dialog with the safety checklist.
  * @returns {Promise<void>} resolves once the dialog has been dismissed
  */
@@ -164,19 +186,43 @@ export function printSafetyChecklist(section, answers, inspectorName, siteId) {
     const frame = document.createElement('iframe');
     frame.setAttribute('aria-hidden', 'true');
     frame.style.cssText = 'position:fixed;left:-9999px;top:0;width:210mm;height:297mm;border:0;';
-    frame.onload = () => {
+
+    let done = false;
+    const finish = (error) => {
+      if (done) return;
+      done = true;
+      clearTimeout(fallback);
+      frame.remove();
+      if (error) reject(error); else resolve();
+    };
+
+    // Chrome renders its print preview asynchronously and keeps reading the
+    // source document while the dialog is open, so the frame must outlive
+    // print(). afterprint tells us the dialog is gone; the timer is only a
+    // leak guard for browsers that never fire it.
+    const fallback = setTimeout(() => finish(), 10 * 60 * 1000);
+
+    frame.onload = async () => {
+      // An iframe fires load for its initial about:blank before the srcdoc
+      // document arrives. Printing that one is what produced a blank page.
+      const doc = frame.contentDocument;
+      if (!doc || !doc.body || !doc.body.firstElementChild) return;
+
       try {
         const win = frame.contentWindow;
+        await waitForAssets(doc);
+        if (done) return;
+        win.addEventListener('afterprint', () => finish(), { once: true });
         win.focus();
         win.print();
-        // Give the print dialog time to take the document before we detach it.
-        setTimeout(() => { frame.remove(); resolve(); }, 1000);
       } catch (e) {
-        frame.remove();
-        reject(e);
+        finish(e);
       }
     };
-    document.body.appendChild(frame);
+
+    // srcdoc before append, so the frame goes straight to the real document
+    // instead of loading about:blank first.
     frame.srcdoc = html;
+    document.body.appendChild(frame);
   });
 }

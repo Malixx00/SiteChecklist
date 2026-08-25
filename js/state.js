@@ -175,6 +175,11 @@ export function setVideoTaken(questionId, taken) {
 }
 
 export function updateNote(questionId, note) {
+  // The debounced input handler and the blur handler both write, so the same
+  // text usually arrives twice. Notifying a second time rebuilds the card and
+  // pulls the note field out from under whatever the technician is doing.
+  const current = answerFor(questionId);
+  if (current.notes === note) return Promise.resolve(current);
   return patch(questionId, { notes: note });
 }
 

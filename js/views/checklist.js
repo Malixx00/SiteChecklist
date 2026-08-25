@@ -19,6 +19,9 @@ let unsubscribe = null;
 export function render(root, navigate) {
   voice?.cancel();
   voice = new VoiceController();
+  // Cards subscribe to state only; failures are reported once for the screen
+  // rather than once per card.
+  voice.onError((message) => toast(message));
 
   const section = state.currentSection();
   const index = state.state.sections.findIndex((s) => s.id === state.state.currentSectionId);
@@ -204,7 +207,9 @@ function replaceCard(cards, questionId) {
   const active = document.activeElement;
   const isEditing = active && existing.contains(active)
     && (active.tagName === 'TEXTAREA' || (active.tagName === 'INPUT' && active.type === 'text'));
-  if (isEditing || existing.matches('.card--signoff') || existing.dataset.lock === '1') return;
+  const isDictating = voice?.activeTarget === questionId;
+  if (isEditing || isDictating
+    || existing.matches('.card--signoff') || existing.dataset.lock === '1') return;
 
   teardownCard(existing);
   const fresh = renderQuestionCard(q, state.answerFor(questionId), cardContext());

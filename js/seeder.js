@@ -11,7 +11,7 @@ export const DEFAULT_SURVEY_NAME = 'Turntable Service Checklist';
 export const DEFAULT_SURVEY_DESCRIPTION = 'Turntable service and inspection checklist';
 
 /** Bump whenever buildDefaultQuestions() changes so existing installs re-seed. */
-export const SEED_VERSION = 4;
+export const SEED_VERSION = 5;
 
 export function buildDefaultQuestions() {
   const sid = DEFAULT_SURVEY_ID;
@@ -29,7 +29,9 @@ export function buildDefaultQuestions() {
       noButton: o.nBtn ?? true, noText: o.nTxt ?? 'Issue',
       checkboxes: (o.opts ?? []).length > 0, checkboxOptions: o.opts ?? [],
       photoRequired: o.photo ?? false, videoRequired: o.video ?? false,
-      commentsShown: o.comments ?? true, commentsLabel: o.label ?? 'Add Note',
+      // A noun, not a verb phrase: the UI renders "Add {label}" / "Hide {label}"
+      // and the PDF renders "{label}: ...", so "Add Note" here reads "Add Add Note".
+      commentsShown: o.comments ?? true, commentsLabel: o.label ?? 'Note',
       isOptional: o.optional ?? false,
     });
 
