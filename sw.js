@@ -29,6 +29,7 @@ const SHELL = [
   'js/report.js',
   'js/safety.js',
   'js/safetyPrint.js',
+  'js/sectionNa.js',
   'js/seeder.js',
   'js/settings.js',
   'js/state.js',
