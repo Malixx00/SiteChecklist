@@ -4,10 +4,12 @@
 import * as state from '../state.js';
 import { settings } from '../settings.js';
 import {
-  SectionStatus, sectionStatus, answeredCount, totalItems,
+  AnswerStatus, SectionStatus, sectionStatus, answeredCount, totalItems,
+  sectionNotApplicable, canMarkSectionNotApplicable,
 } from '../logic.js';
+import { reasonsFor } from '../sectionNa.js';
 import { SAFETY_SECTION_ID } from '../safety.js';
-import { esc, icon, el, toast, menu, confirmDialog } from '../ui.js';
+import { esc, icon, el, toast, menu, confirmDialog, reasonDialog } from '../ui.js';
 import { topBar, bottomNav, paintNetworkPills } from './shell.js';
 import { renderQuestionCard, teardownCard } from '../components/questionCard.js';
 import { VoiceController, insertVoiceText } from '../voice.js';
@@ -105,7 +107,10 @@ function paintRibbon(root) {
     const total = totalItems(section);
 
     let badge = '';
-    if (status === SectionStatus.COMPLETE) {
+    if (status === SectionStatus.NOT_APPLICABLE) {
+      // Deliberately not the green tick: nothing here was inspected.
+      badge = '<span class="tab__badge tab__badge--na">N/A</span>';
+    } else if (status === SectionStatus.COMPLETE) {
       badge = `<span class="tab__done" aria-label="Complete">${icon('checkCircle')}</span>`;
     } else if (status === SectionStatus.IN_PROGRESS) {
       badge = `<span class="tab__badge tab__badge--progress">${answered}/${total}</span>`;
@@ -129,6 +134,11 @@ function paintProgress(root) {
   const host = root.querySelector('[data-progress]');
   const section = state.currentSection();
   if (!section) { host.innerHTML = ''; return; }
+
+  // "0 / 3" under a section declared not applicable reads as outstanding work.
+  if (sectionNotApplicable(section, state.state.answers)) {
+    host.innerHTML = ''; host.hidden = true; return;
+  }
 
   const answered = answeredCount(section, state.state.answers);
   const total = totalItems(section);
@@ -176,10 +186,34 @@ function paintCards(cards) {
     return;
   }
 
-  const ctx = cardContext();
+  const naReason = sectionNotApplicable(section, state.state.answers);
+  const offerNa = canMarkSectionNotApplicable(section);
   const fragment = document.createDocumentFragment();
-  for (const q of section.questions) {
-    fragment.appendChild(renderQuestionCard(q, state.answerFor(q.id), ctx));
+
+  // The banner goes after the section's own heading card, because that heading
+  // ("Complete for systems fitted with...") is the text that tells the
+  // technician whether the section applies at all.
+  const headingIndex = section.questions.findIndex((q) => q.isHeading);
+  let bannerPlaced = false;
+  const placeBanner = () => {
+    if (bannerPlaced || !offerNa) return;
+    bannerPlaced = true;
+    fragment.appendChild(sectionNaBanner(section, naReason));
+  };
+  if (headingIndex === -1) placeBanner();
+
+  const ctx = cardContext();
+  for (const [i, q] of section.questions.entries()) {
+    const card = renderQuestionCard(q, state.answerFor(q.id), ctx);
+    // Left visible but inert, so the technician can still see what is being
+    // skipped rather than the section simply vanishing.
+    if (naReason && !q.isHeading) {
+      card.classList.add('card--na');
+      card.querySelectorAll('button, input, textarea, select, a')
+        .forEach((c) => { c.disabled = true; c.tabIndex = -1; });
+    }
+    fragment.appendChild(card);
+    if (i === headingIndex) placeBanner();
   }
 
   // The safety section carries its own export action at the end of the list.
@@ -192,6 +226,67 @@ function paintCards(cards) {
 
   cards.appendChild(fragment);
   cards.scrollTop = 0;
+}
+
+/**
+ * The "whole section does not apply" control that sits above the questions.
+ * Only reached for sections with nothing mandatory in them.
+ */
+function sectionNaBanner(section, reason) {
+  if (reason) {
+    const node = el(`
+      <div class="nabanner nabanner--on">
+        <div class="nabanner__text">
+          <strong>Marked not applicable</strong>
+          <span>${esc(reason)}</span>
+        </div>
+        <button type="button" class="btn btn--outline btn--small" data-act="na-undo">This section applies</button>
+      </div>`);
+    node.querySelector('[data-act="na-undo"]').addEventListener('click', async () => {
+      await state.clearSectionNotApplicable(section.id);
+      toast(`${section.title} is back in the checklist.`);
+    });
+    return node;
+  }
+
+  const node = el(`
+    <div class="nabanner">
+      <div class="nabanner__text">
+        <strong>Does this section apply?</strong>
+        <span>If not, record why once instead of every question.</span>
+      </div>
+      <button type="button" class="btn btn--outline btn--small" data-act="na-set">Not applicable</button>
+    </div>`);
+  node.querySelector('[data-act="na-set"]').addEventListener('click', () => markSectionNotApplicable(section));
+  return node;
+}
+
+async function markSectionNotApplicable(section) {
+  // Answering questions then waving the section off would silently bury real
+  // findings, so make that a deliberate choice.
+  const answered = section.questions.filter((q) => !q.isHeading
+    && (state.state.answers[q.id]?.status ?? AnswerStatus.UNANSWERED) !== AnswerStatus.UNANSWERED);
+  if (answered.length > 0) {
+    const ok = await confirmDialog({
+      title: 'Answers already recorded',
+      message: `${answered.length} ${answered.length === 1 ? 'question has' : 'questions have'} been answered in this section. `
+        + 'Marking it not applicable will hide those answers from the report. Continue?',
+      confirmLabel: 'Continue',
+      destructive: true,
+    });
+    if (!ok) return;
+  }
+
+  const reason = await reasonDialog({
+    title: `${section.title}: not applicable`,
+    message: 'Recorded in the report so a later reader knows this was a decision, not an omission.',
+    options: reasonsFor(section.id),
+    confirmLabel: 'Mark not applicable',
+  });
+  if (!reason) return;
+
+  await state.setSectionNotApplicable(section.id, reason);
+  toast(`${section.title} marked not applicable.`);
 }
 
 function replaceCard(cards, questionId) {

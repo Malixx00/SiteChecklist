@@ -11,6 +11,7 @@ export const SectionStatus = {
   NOT_STARTED: 'NOT_STARTED',
   IN_PROGRESS: 'IN_PROGRESS',
   COMPLETE: 'COMPLETE',
+  NOT_APPLICABLE: 'NOT_APPLICABLE',
 };
 
 export const ThemeMode = { LIGHT: 'LIGHT', DARK: 'DARK', SYSTEM: 'SYSTEM' };
@@ -65,7 +66,43 @@ export function sectionTitleFromId(id) {
 const statusOf = (answers, q) => answers[q.id]?.status ?? AnswerStatus.UNANSWERED;
 const isSettled = (s) => s === AnswerStatus.DONE || s === AnswerStatus.NOT_REQUIRED;
 
+// ---------------------------------------------------------------------------
+// Section-level "not applicable"
+//
+// A technician can declare a whole optional section inapplicable (no sensors
+// fitted, no vehicle for the load test) with a recorded reason. That is a
+// different fact from leaving it blank, and only the person on site knows it.
+//
+// The declaration is stored as an ordinary answer under a reserved key, so it
+// persists, resets and exports with everything else and needs no new store.
+// Nothing iterates answers blindly - every read is answers[question.id] - so
+// the reserved key is invisible to the rest of the app.
+// ---------------------------------------------------------------------------
+
+const SECTION_NA_PREFIX = '__section_na__';
+
+export const sectionNaKey = (sectionId) => `${SECTION_NA_PREFIX}${sectionId}`;
+
+/** @returns {string|null} the recorded reason, or null when the section applies */
+export function sectionNotApplicable(section, answers) {
+  const a = answers[sectionNaKey(section.id)];
+  if (!a || a.status !== AnswerStatus.NOT_REQUIRED) return null;
+  return (a.notes ?? '').trim() || 'No reason recorded';
+}
+
+/**
+ * Only sections with nothing mandatory in them can be waved off wholesale.
+ * A section carrying even one required question must still be worked through,
+ * so a safety-critical item can never be dismissed with a single tap.
+ */
+export function canMarkSectionNotApplicable(section) {
+  return !isMandatorySection(section)
+    && section.questions.some((q) => !q.isHeading);
+}
+
 export function sectionStatus(section, answers) {
+  if (sectionNotApplicable(section, answers)) return SectionStatus.NOT_APPLICABLE;
+
   const checkable = section.questions.filter((q) => !q.isHeading);
   const required = checkable.filter((q) => !q.isOptional);
   const anyAnswered = checkable.some((q) => statusOf(answers, q) !== AnswerStatus.UNANSWERED);

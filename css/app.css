@@ -429,6 +429,30 @@ body {
   box-shadow: var(--shadow);
 }
 
+/* Section-level "not applicable" control, above the question cards. */
+.nabanner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.nabanner--on { border-color: var(--cg-blue); background: color-mix(in srgb, var(--cg-blue) 8%, var(--surface)); }
+/* Stacks on narrow screens so neither the copy nor the button gets squeezed. */
+@media (max-width: 419px) { .nabanner { flex-direction: column; align-items: stretch; gap: 10px; } }
+.nabanner__text { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.nabanner__text strong { font-size: 15px; }
+.nabanner__text span { font-size: 13px; color: var(--on-surface-muted); }
+.nabanner .btn { flex: 0 0 auto; }
+
+/* Skipped questions stay legible but obviously out of play. */
+.card--na { opacity: 0.45; }
+.card--na .btn, .card--na .input { pointer-events: none; }
+
+.tab__badge--na { background: var(--independence); color: #fff; }
+
 /* Optional questions get a faint tint - visible at a glance, well short of
    affecting text contrast in either theme. */
 .card--optional {
@@ -548,6 +572,8 @@ body {
 /* ---------------------------------------------------------------- fields */
 
 .field { display: flex; flex-direction: column; gap: 6px; }
+/* display:flex above would otherwise beat the user agent's [hidden] rule. */
+.field[hidden] { display: none; }
 .field__label {
   font-family: var(--font-display);
   font-style: italic;
@@ -1015,6 +1041,20 @@ body {
   line-height: 1.1;
 }
 .dialog__body { margin: 0 0 14px; color: var(--on-surface); font-size: 14px; }
+
+.choices { display: flex; flex-direction: column; gap: 2px; }
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--tap);
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 15px;
+}
+.choice:active { background: var(--surface-2); }
+.choice input { width: 20px; height: 20px; flex: 0 0 auto; accent-color: var(--cg-blue); }
 .dialog__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 
 .menu-scrim { position: fixed; inset: 0; z-index: 90; }

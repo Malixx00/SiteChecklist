@@ -72,6 +72,10 @@ export function putAnswer(answer) {
   return tx('answers', 'readwrite', (s) => wrap(s.put({ ...answer, timestamp: Date.now() })));
 }
 
+export function deleteAnswer(questionId) {
+  return tx('answers', 'readwrite', (s) => wrap(s.delete(questionId)));
+}
+
 /** Clears every answer and every attached photo. */
 export function clearAnswers() {
   return tx(['answers', 'photos'], 'readwrite', ([answers, photos]) =>

@@ -158,6 +158,69 @@ export function promptDialog({ title, message = '', label = '', value = '', plac
   });
 }
 
+/**
+ * Pick one of `options`, or type your own. Nothing is preselected, so the
+ * technician has to make an actual choice rather than accepting a default.
+ * @returns {Promise<string|null>} the chosen text, or null on dismiss
+ */
+export function reasonDialog({ title, message = '', options, confirmLabel = 'Confirm' }) {
+  const list = options.map((text, i) => `
+    <label class="choice">
+      <input type="radio" name="reason" value="${esc(text)}" data-i="${i}">
+      <span>${esc(text)}</span>
+    </label>`).join('');
+
+  return openDialog(`
+    <h2 class="dialog__title">${esc(title)}</h2>
+    ${message ? `<p class="dialog__body">${esc(message)}</p>` : ''}
+    <div class="choices">
+      ${list}
+      <label class="choice">
+        <input type="radio" name="reason" value="" data-other>
+        <span>Other reason</span>
+      </label>
+    </div>
+    <label class="field" data-otherfield hidden>
+      <input class="input" type="text" placeholder="Describe the reason" maxlength="120">
+    </label>
+    <div class="dialog__actions">
+      <button class="btn btn--text" data-act="cancel" type="button">Cancel</button>
+      <button class="btn btn--filled" data-act="ok" type="button">${esc(confirmLabel)}</button>
+    </div>`, (dialog, done) => {
+    const ok = dialog.querySelector('[data-act="ok"]');
+    const otherField = dialog.querySelector('[data-otherfield]');
+    const otherInput = otherField.querySelector('input');
+
+    const chosen = () => dialog.querySelector('input[name="reason"]:checked');
+    const value = () => {
+      const picked = chosen();
+      if (!picked) return '';
+      return picked.hasAttribute('data-other') ? otherInput.value.trim() : picked.value;
+    };
+    const sync = () => {
+      const picked = chosen();
+      const other = picked?.hasAttribute('data-other') ?? false;
+      otherField.toggleAttribute('hidden', !other);
+      ok.disabled = !value();
+    };
+
+    dialog.querySelectorAll('input[name="reason"]').forEach((radio) => {
+      radio.addEventListener('change', () => {
+        sync();
+        if (radio.hasAttribute('data-other')) otherInput.focus();
+      });
+    });
+    otherInput.addEventListener('input', sync);
+    otherInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !ok.disabled) done(value());
+    });
+
+    sync();
+    dialog.querySelector('[data-act="cancel"]').addEventListener('click', () => done(null));
+    ok.addEventListener('click', () => done(value()));
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Menus
 // ---------------------------------------------------------------------------

@@ -4,7 +4,9 @@
 // checked options. The Android report captured those ticks but never printed
 // them. Flagged in docs/FEATURE-MATRIX.md - delete the block below to revert.
 
-import { AnswerStatus, SectionStatus, sectionStatus, isMandatorySection } from './logic.js';
+import {
+  AnswerStatus, SectionStatus, sectionStatus, isMandatorySection, sectionNotApplicable,
+} from './logic.js';
 
 // Formatted explicitly rather than through Intl: the report is a company
 // document that must read the same on every technician's device, and the
@@ -51,6 +53,18 @@ export function generateReport(sections, answers, inspectorName, siteId) {
 
   for (const section of sections) {
     const status = sectionStatus(section, answers);
+
+    // A declared exclusion, not an omission. Printing the reason instead of a
+    // column of [NOT ANSWERED] is the whole point of the declaration.
+    const naReason = sectionNotApplicable(section, answers);
+    if (naReason) {
+      line(`--- ${section.title.toUpperCase()} --- [NOT APPLICABLE]`);
+      line();
+      line(`  Reason: ${naReason}`);
+      line();
+      continue;
+    }
+
     const optionalSection = !isMandatorySection(section);
     const label = optionalSection ? 'OPTIONAL'
       : status === SectionStatus.COMPLETE ? 'COMPLETE' : 'INCOMPLETE';

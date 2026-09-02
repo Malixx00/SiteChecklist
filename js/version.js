@@ -3,4 +3,4 @@
 // fresh cache; docs/DEPLOYMENT.md covers the release steps.
 export const APP_NAME = 'Site Reporter';
 export const APP_VERSION = '2.2.0';
-export const BUILD = '2026.08.25.1';
+export const BUILD = '2026.08.25.2';

@@ -5,7 +5,9 @@
 
 import * as db from './db.js';
 import { settings } from './settings.js';
-import { AnswerStatus, answer as newAnswer, sectionTitleFromId, allRequiredComplete } from './logic.js';
+import {
+  AnswerStatus, answer as newAnswer, sectionTitleFromId, allRequiredComplete, sectionNaKey,
+} from './logic.js';
 import { buildSafetySection, SAFETY_SECTION_ID } from './safety.js';
 import {
   DEFAULT_SURVEY_ID, DEFAULT_SURVEY_NAME, DEFAULT_SURVEY_DESCRIPTION,
@@ -172,6 +174,34 @@ export function setPhotoTaken(questionId, taken) {
 export function setVideoTaken(questionId, taken) {
   if (answerFor(questionId).videoTaken === taken) return Promise.resolve();
   return patch(questionId, { videoTaken: taken });
+}
+
+/**
+ * Declares a whole section inapplicable, with the technician's reason.
+ * Notifies as a section change so the screen rebuilds rather than patching
+ * one card - every card in the section changes appearance.
+ */
+export async function setSectionNotApplicable(sectionId, reason) {
+  const record = {
+    ...newAnswer(sectionNaKey(sectionId)),
+    status: AnswerStatus.NOT_REQUIRED,
+    notes: reason,
+    timestamp: Date.now(),
+  };
+  state.answers[record.questionId] = record;
+  recomputeCompletion();
+  notify({ section: true });
+  await db.putAnswer(record);
+  return record;
+}
+
+/** Reverses the above; the section's own answers are left untouched. */
+export async function clearSectionNotApplicable(sectionId) {
+  const key = sectionNaKey(sectionId);
+  delete state.answers[key];
+  recomputeCompletion();
+  notify({ section: true });
+  await db.deleteAnswer(key);
 }
 
 export function updateNote(questionId, note) {
